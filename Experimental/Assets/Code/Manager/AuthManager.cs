@@ -3,9 +3,14 @@ using System.Net;
 using System.Text;
 using System.IO;
 using SimpleJSON;
+using System;
 
 public class AuthManager : MonoBehaviour
 {
+    public LoginDialogController loginDialogController;
+
+    private string device_id;
+
     enum ResponseStatus
     {
         SUCCESS = 1,
@@ -18,49 +23,10 @@ public class AuthManager : MonoBehaviour
 
     void Start()
     {
-        var request = (HttpWebRequest)WebRequest.Create("http://localhost:8000/coconut/authenticate_user/");
-
-        var device_id = SystemInfo.deviceUniqueIdentifier;
-        Debug.LogError("device_id=" + device_id);
-        var postData = "device_id=" + device_id;
-        var data = Encoding.ASCII.GetBytes(postData);
-
-        request.Method = "POST";
-        request.ContentType = "application/x-www-form-urlencoded";
-        request.ContentLength = data.Length;
-
-        using (var stream = request.GetRequestStream())
-        {
-            stream.Write(data, 0, data.Length);
-        }
-
-        Debug.LogError("Sending request");
-        var response = (HttpWebResponse)request.GetResponse();
-
-        var responseString = new StreamReader(response.GetResponseStream()).ReadToEnd();
-        var responseJson = JSON.Parse(responseString);
-        Debug.LogError(responseJson);
-
-        ResponseStatus responseStatus = (ResponseStatus)responseJson["status"].AsInt;
-        switch (responseStatus)
-        {
-            case ResponseStatus.SUCCESS:
-                Debug.LogError(responseStatus.ToString() + ": " + responseJson["user"].Value);
-                break;
-            case ResponseStatus.FAIL:
-            case ResponseStatus.INVALID_ARGUMENT:
-                Debug.LogError(responseStatus.ToString() + ": " + responseJson["msg"].Value);
-                break;
-            case ResponseStatus.CREATE_USER:
-                make_create_user_request(device_id, "whiteSkar"); //TODO: get from UI
-                break;
-            default:
-                Debug.LogError("Unhandled response status" + responseStatus.ToString());
-                break;
-        }
+        sendAuthenticateUserRequest();
     }
 	
-	void make_create_user_request(string device_id, string user_name)
+	public void sendCreateUserRequest(string user_name, Action<string> successCallback, Action<string> failureCallback)
     {
         var request = (HttpWebRequest)WebRequest.Create("http://localhost:8000/coconut/create_user/");
 
@@ -75,25 +41,69 @@ public class AuthManager : MonoBehaviour
         {
             stream.Write(data, 0, data.Length);
         }
-
-        Debug.LogError("Sending request");
+        Debug.Log("Sending request");
         var response = (HttpWebResponse)request.GetResponse();
 
         var responseString = new StreamReader(response.GetResponseStream()).ReadToEnd();
         var responseJson = JSON.Parse(responseString);
-        Debug.LogError(responseJson);
+        Debug.Log(responseJson);
 
         ResponseStatus responseStatus = (ResponseStatus) responseJson["status"].AsInt;
         switch (responseStatus)
         {
             case ResponseStatus.SUCCESS:
             case ResponseStatus.USER_WITH_SAME_DEVICE_ID_ALREADY_EXIST:
-                Debug.LogError(responseStatus.ToString() + ": " + responseJson["user"].Value);
+                successCallback(responseJson["user"].Value);
                 break;
             case ResponseStatus.FAIL:
             case ResponseStatus.INVALID_ARGUMENT:
             case ResponseStatus.USER_WITH_SAME_NAME_ALREADY_EXIST:
-                Debug.LogError(responseStatus.ToString() + ": " + responseJson["msg"].Value);
+                failureCallback(responseJson["msg"].Value);
+                break;
+            default:
+                Debug.LogError("Unhandled response status" + responseStatus.ToString());
+                break;
+        }
+    }
+
+    private void sendAuthenticateUserRequest()
+    {
+        var request = (HttpWebRequest)WebRequest.Create("http://localhost:8000/coconut/authenticate_user/");
+
+        device_id = SystemInfo.deviceUniqueIdentifier;
+        Debug.Log("device_id=" + device_id);
+        var postData = "device_id=" + device_id;
+        var data = Encoding.ASCII.GetBytes(postData);
+
+        request.Method = "POST";
+        request.ContentType = "application/x-www-form-urlencoded";
+        request.ContentLength = data.Length;
+
+        using (var stream = request.GetRequestStream())
+        {
+            stream.Write(data, 0, data.Length);
+        }
+
+        Debug.Log("Sending request");
+        var response = (HttpWebResponse)request.GetResponse();
+
+        var responseString = new StreamReader(response.GetResponseStream()).ReadToEnd();
+        var responseJson = JSON.Parse(responseString);
+        Debug.Log(responseJson);
+
+        ResponseStatus responseStatus = (ResponseStatus)responseJson["status"].AsInt;
+        switch (responseStatus)
+        {
+            case ResponseStatus.SUCCESS:
+                Debug.Log(responseJson["user"].Value);
+                break;
+            case ResponseStatus.FAIL:
+            case ResponseStatus.INVALID_ARGUMENT:
+                Debug.Log(responseJson["msg"].Value);
+                break;
+            case ResponseStatus.CREATE_USER:
+                loginDialogController.setup(this);
+                loginDialogController.gameObject.SetActive(true);
                 break;
             default:
                 Debug.LogError("Unhandled response status" + responseStatus.ToString());
